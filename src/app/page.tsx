@@ -1,101 +1,174 @@
-import Image from "next/image";
+'use client';
+import React, {
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+  useState,
+} from 'react';
+import { Editor, Transforms, Range, createEditor, Descendant } from 'slate';
+import { withHistory } from 'slate-history';
+import {
+  Slate,
+  Editable,
+  ReactEditor,
+  withReact,
+  RenderLeafProps,
+  RenderElementProps,
+} from 'slate-react';
 
-export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+import Portal from '@/components/Portal';
+import withMentions from '@/components/slate-mention/withMentions';
+import { insertMention } from '@/components/slate-mention/helpers';
+import Leaf from '@/components/slate-mention/leaf';
+import Element from '@/components/slate-mention/element';
+import { MENTIONS } from '@/components/slate-mention/dummy-data';
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+const MentionExample = () => {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [target, setTarget] = useState<Range | undefined>();
+  const [index, setIndex] = useState(0);
+  const [search, setSearch] = useState('');
+  const renderElement = useCallback(
+    (props: RenderElementProps) => <Element {...props} />,
+    []
   );
-}
+  const renderLeaf = useCallback(
+    (props: RenderLeafProps) => <Leaf {...props} />,
+    []
+  );
+  const editor = useMemo(
+    () => withMentions(withReact(withHistory(createEditor()))) as ReactEditor,
+    []
+  );
+
+  const mentions = MENTIONS.filter((c) =>
+    c.toLowerCase().startsWith(search.toLowerCase())
+  ).slice(0, 10);
+
+  const onKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement> | undefined) => {
+      if (event && target && mentions.length > 0) {
+        switch (event.key) {
+          case 'ArrowDown':
+            event.preventDefault();
+            const prevIndex = index >= mentions.length - 1 ? 0 : index + 1;
+            setIndex(prevIndex);
+            break;
+          case 'ArrowUp':
+            event.preventDefault();
+            const nextIndex = index <= 0 ? mentions.length - 1 : index - 1;
+            setIndex(nextIndex);
+            break;
+          case 'Tab':
+          case 'Enter':
+            event.preventDefault();
+            Transforms.select(editor, target);
+            insertMention(editor, mentions[index]);
+            setTarget(undefined);
+            break;
+          case 'Escape':
+            event.preventDefault();
+            setTarget(undefined);
+            break;
+        }
+      }
+    },
+    [mentions, editor, index, target]
+  );
+
+  useEffect(() => {
+    if (target && mentions.length > 0) {
+      const el = ref.current;
+      const domRange = ReactEditor.toDOMRange(editor as ReactEditor, target);
+      const rect = domRange.getBoundingClientRect();
+      if (!el) return;
+      el.style.top = `${rect.top + window.scrollY + 24}px`;
+      el.style.left = `${rect.left + window.scrollX}px`;
+    }
+  }, [mentions.length, editor, index, search, target]);
+
+  return (
+    <Slate
+      editor={editor}
+      initialValue={initialValue}
+      onChange={() => {
+        const { selection } = editor;
+
+        if (selection && Range.isCollapsed(selection)) {
+          const [start] = Range.edges(selection);
+          const wordBefore = Editor.before(editor, start, { unit: 'word' });
+          const before = wordBefore && Editor.before(editor, wordBefore);
+          const beforeRange = before && Editor.range(editor, before, start);
+          const beforeText = beforeRange && Editor.string(editor, beforeRange);
+          const beforeMatch = beforeText && beforeText.match(/^@(\w+)$/);
+          const after = Editor.after(editor, start);
+          const afterRange = Editor.range(editor, start, after);
+          const afterText = Editor.string(editor, afterRange);
+          const afterMatch = afterText.match(/^(\s|$)/);
+
+          if (beforeMatch && afterMatch) {
+            setTarget(beforeRange);
+            setSearch(beforeMatch[1]);
+            setIndex(0);
+            return;
+          }
+        }
+
+        setTarget(undefined);
+      }}
+    >
+      <Editable
+        renderElement={renderElement}
+        renderLeaf={renderLeaf}
+        onKeyDown={onKeyDown}
+        placeholder='Write your post...'
+      />
+      {target && mentions.length > 0 && (
+        <Portal>
+          <div
+            ref={ref}
+            style={{
+              top: '-9999px',
+              left: '-9999px',
+              position: 'absolute',
+              zIndex: 1,
+              padding: '3px',
+              background: 'white',
+              borderRadius: '4px',
+              boxShadow: '0 1px 5px rgba(0,0,0,.2)',
+            }}
+            data-cy='mentions-portal'
+          >
+            {mentions.map((mention, i) => (
+              <div
+                key={mention}
+                onClick={() => {
+                  Transforms.select(editor, target);
+                  insertMention(editor, mention);
+                  setTarget(undefined);
+                }}
+                style={{
+                  padding: '1px 3px',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  background: i === index ? '#B4D5FF' : 'transparent',
+                }}
+              >
+                {mention}
+              </div>
+            ))}
+          </div>
+        </Portal>
+      )}
+    </Slate>
+  );
+};
+
+const initialValue: Descendant[] = [
+  {
+    children: [{ text: '' }],
+  },
+];
+
+export default MentionExample;
